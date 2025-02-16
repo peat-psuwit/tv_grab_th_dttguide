@@ -243,6 +243,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         prog="tv_grab_th_dttguide", description="XMLTV grabber for Thailand's DTT Guide"
     )
+    parser.add_argument("--version", action="store_true")
     # https://wiki.xmltv.org/index.php/XmltvCapabilities
     parser.add_argument("--description", action="store_true")
     parser.add_argument("--capabilities", action="store_true")
@@ -256,6 +257,10 @@ def main() -> int:
     parser.add_argument("--config-file")
 
     args = parser.parse_args()
+
+    if args.version:
+        print("0.0~dev")
+        return 0
 
     if args.description:
         print("Thailand (https://dttguide.nbtc.go.th/dttguide)")
