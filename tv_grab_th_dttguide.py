@@ -292,7 +292,8 @@ def main() -> int:
         return 0
     else:
         print(
-            "Warning: DTTGuide doesn't provide enough data for requested amount of days."
+            "Warning: DTTGuide doesn't provide enough data for requested amount of days.",
+            file=sys.stderr,
         )
         return 1
 
