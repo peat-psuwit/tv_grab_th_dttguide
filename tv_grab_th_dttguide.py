@@ -252,7 +252,7 @@ def main() -> int:
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--output", help="Output file, default to standard output.")
     parser.add_argument("--days", type=int)
-    parser.add_argument("--offset", type=int)
+    parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--config-file")
     # "manualconfig" capability
     parser.add_argument("--configure", action="store_true")
@@ -283,21 +283,14 @@ def main() -> int:
     if args.output is not None:
         outfile = open(args.output, "w")
 
-    earliest_start: Optional[datetime] = None
+    earliest_start: datetime
     latest_start_exclusive: Optional[datetime] = None
 
-    # XXX: should we provide historical data in absence of either flags?
-    if args.offset is not None:
-        earliest_start = datetime.now(TZ_THAI).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        ) + timedelta(days=args.offset)
+    earliest_start = datetime.now(TZ_THAI).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ) + timedelta(days=args.offset)
 
     if args.days is not None:
-        if earliest_start is None:
-            earliest_start = datetime.now(TZ_THAI).replace(
-                hour=0, minute=0, second=0, microsecond=0
-            )
-
         latest_start_exclusive = earliest_start + timedelta(days=args.days)
 
     covers_days = fetch_filter_convert(outfile, earliest_start, latest_start_exclusive)
