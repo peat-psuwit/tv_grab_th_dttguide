@@ -16,6 +16,8 @@ from typing import Optional, TextIO
 
 import requests
 
+TZ_THAI = timezone(timedelta(hours=7))
+
 
 class DTTGuide:
     """
@@ -113,14 +115,15 @@ def parse_duration(pgDuration: str):
     return timedelta(hours=float(hours), minutes=float(minutes), seconds=float(seconds))
 
 
-def programme_from_programdata(program_data: list[dict[str, str]]) -> list[ET.Element]:
-    timezone_thai = timezone(timedelta(hours=7))
+def programme_from_programdata(
+    program_data: list[dict[str, str]]
+) -> list[ET.Element]:
     ret: list[ET.Element] = []
 
     for program in program_data:
         start = datetime.strptime(
             f"{program['pgDate']} {program['pgBeginTime']}", "%d-%m-%y %H:%M:%S"
-        ).replace(tzinfo=timezone_thai)
+        ).replace(tzinfo=TZ_THAI)
         stop = start + parse_duration(program["pgDuration"])
 
         e_programme = ET.Element(
@@ -150,7 +153,13 @@ def programme_from_programdata(program_data: list[dict[str, str]]) -> list[ET.El
     return ret
 
 
-def fetch_and_convert(outfile: TextIO):
+# Return whether data covers [earliest_start, latest_start_exclusive)
+# TODO: split this function into 4 (fetch(?), filter, convert, is_cover_days)
+def fetch_filter_convert(
+    outfile: TextIO,
+    earliest_start: Optional[datetime],
+    latest_start_exclusive: Optional[datetime],
+) -> bool:
     dtt_guide = DTTGuide()
 
     e_tv = ET.Element(
@@ -176,19 +185,52 @@ def fetch_and_convert(outfile: TextIO):
         )
     )
 
-    e_tv.extend(
-        programme_from_programdata(
-            dtt_guide.getProgramDataWeb(DTTGuide.ChannelType.NATIONAL)
-        )
-    )
-    e_tv.extend(
-        programme_from_programdata(
-            dtt_guide.getProgramDataWeb(DTTGuide.ChannelType.LOCAL)
-        )
-    )
+    program_data = dtt_guide.getProgramDataWeb(
+        DTTGuide.ChannelType.NATIONAL
+    ) + dtt_guide.getProgramDataWeb(DTTGuide.ChannelType.LOCAL)
+
+    def whithin_start_dates(program):
+        start = datetime.strptime(
+            f"{program['pgDate']} {program['pgBeginTime']}", "%d-%m-%y %H:%M:%S"
+        ).replace(tzinfo=TZ_THAI)
+
+        if earliest_start is not None and start < earliest_start:
+            return False
+
+        if latest_start_exclusive is not None and start >= latest_start_exclusive:
+            return False
+
+        return True
+
+    program_data = list(filter(whithin_start_dates, program_data))
+
+    e_tv.extend(programme_from_programdata(program_data))
 
     tree = ET.ElementTree(e_tv)
     tree.write(outfile, encoding="unicode")
+
+    # Determine whether program_data covers [earliest_start, latest_start_exclusive)
+
+    if earliest_start is None or latest_start_exclusive is None:
+        return True
+
+    covers_earliest_start = False
+    covers_latest_start_exclusive = False
+    for program in program_data:
+        start = datetime.strptime(
+            f"{program['pgDate']} {program['pgBeginTime']}", "%d-%m-%y %H:%M:%S"
+        ).replace(tzinfo=TZ_THAI)
+
+        if start - earliest_start < timedelta(hours=24):
+            covers_earliest_start = True
+
+        if latest_start_exclusive - start < timedelta(hours=24):
+            covers_latest_start_exclusive = True
+
+        if covers_earliest_start and covers_latest_start_exclusive:
+            return True
+
+    return False
 
 
 def main() -> int:
@@ -202,10 +244,8 @@ def main() -> int:
     # We don't output anything anyway.
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--output", help="Output file, default to standard output.")
-    # We receive fixed amount of data from application, so these 2 arguments are
-    # silently ignored.
-    parser.add_argument("--days")
-    parser.add_argument("--offset")
+    parser.add_argument("--days", type=int)
+    parser.add_argument("--offset", type=int)
     # We offer no configurability.
     parser.add_argument("--config-file")
 
@@ -223,9 +263,32 @@ def main() -> int:
     if args.output is not None:
         outfile = open(args.output, "w")
 
-    fetch_and_convert(outfile)
+    earliest_start: Optional[datetime] = None
+    latest_start_exclusive: Optional[datetime] = None
 
-    return 0
+    # XXX: should we provide historical data in absence of either flags?
+    if args.offset is not None:
+        earliest_start = datetime.now(TZ_THAI).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ) + timedelta(days=args.offset)
+
+    if args.days is not None:
+        if earliest_start is None:
+            earliest_start = datetime.now(TZ_THAI).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+
+        latest_start_exclusive = earliest_start + timedelta(days=args.days)
+
+    covers_days = fetch_filter_convert(outfile, earliest_start, latest_start_exclusive)
+
+    if covers_days:
+        return 0
+    else:
+        print(
+            "Warning: DTTGuide doesn't provide enough data for requested amount of days."
+        )
+        return 1
 
 
 if __name__ == "__main__":
