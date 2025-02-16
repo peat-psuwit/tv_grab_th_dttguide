@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import TextIO
+from typing import Optional, TextIO
 
 import requests
 
@@ -37,9 +37,12 @@ class DTTGuide:
             {"content-type": "application/json; charset=utf-8"}
         )
 
-    def getJson(self, action: str, channel_type: ChannelType) -> dict:
+    def getJson(self, action: str, channel_type: Optional[ChannelType] = None) -> dict:
         url = f"{DTTGuide.BASE_URL}/{action}"
-        data = {"channelType": f"{channel_type.value}"}
+        if channel_type is not None:
+            data = {"channelType": f"{channel_type.value}"}
+        else:
+            data = None
 
         res = self.req_session.post(url, json=data)
         return res.json()
@@ -48,8 +51,8 @@ class DTTGuide:
         res_json = self.getJson("getProgramDataWeb", channel_type)
         return res_json["results"]
 
-    def getChannelNameWeb(self, channel_type: ChannelType) -> list[dict[str, str]]:
-        res_json = self.getJson("getChannelNameWeb", channel_type)
+    def getChannelNameWeb(self) -> list[dict[str, str]]:
+        res_json = self.getJson("getChannelNameWeb")
         return res_json["results"]
 
     def getChannelLogoMediaWeb(self, channel_type: ChannelType) -> list[dict[str, str]]:
@@ -147,7 +150,7 @@ def programme_from_programdata(program_data: list[dict[str, str]]) -> list[ET.El
     return ret
 
 
-def fetch_and_convert(outfile: TextIO, channel_type: DTTGuide.ChannelType):
+def fetch_and_convert(outfile: TextIO):
     dtt_guide = DTTGuide()
 
     e_tv = ET.Element(
@@ -162,8 +165,9 @@ def fetch_and_convert(outfile: TextIO, channel_type: DTTGuide.ChannelType):
 
     e_tv.extend(
         channels_from_chnames_and_chlogos(
-            dtt_guide.getChannelNameWeb(channel_type),
-            dtt_guide.getChannelLogoMediaWeb(channel_type),
+            dtt_guide.getChannelNameWeb(),
+            dtt_guide.getChannelLogoMediaWeb(DTTGuide.ChannelType.NATIONAL)
+            + dtt_guide.getChannelLogoMediaWeb(DTTGuide.ChannelType.LOCAL),
             {
                 # No one calls ThaiPBS "องค์การกระจายเสียงและแพร่ภาพสาธารณะแห่งประเทศไทย"
                 "03": "ThaiPBS",
@@ -172,7 +176,16 @@ def fetch_and_convert(outfile: TextIO, channel_type: DTTGuide.ChannelType):
         )
     )
 
-    e_tv.extend(programme_from_programdata(dtt_guide.getProgramDataWeb(channel_type)))
+    e_tv.extend(
+        programme_from_programdata(
+            dtt_guide.getProgramDataWeb(DTTGuide.ChannelType.NATIONAL)
+        )
+    )
+    e_tv.extend(
+        programme_from_programdata(
+            dtt_guide.getProgramDataWeb(DTTGuide.ChannelType.LOCAL)
+        )
+    )
 
     tree = ET.ElementTree(e_tv)
     tree.write(outfile, encoding="unicode")
@@ -210,7 +223,7 @@ def main() -> int:
     if args.output is not None:
         outfile = open(args.output, "w")
 
-    fetch_and_convert(outfile, DTTGuide.ChannelType.NATIONAL)
+    fetch_and_convert(outfile)
 
     return 0
 
