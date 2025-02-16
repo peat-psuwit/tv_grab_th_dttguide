@@ -115,9 +115,7 @@ def parse_duration(pgDuration: str):
     return timedelta(hours=float(hours), minutes=float(minutes), seconds=float(seconds))
 
 
-def programme_from_programdata(
-    program_data: list[dict[str, str]]
-) -> list[ET.Element]:
+def programme_from_programdata(program_data: list[dict[str, str]]) -> list[ET.Element]:
     ret: list[ET.Element] = []
 
     for program in program_data:
@@ -162,29 +160,10 @@ def fetch_filter_convert(
 ) -> bool:
     dtt_guide = DTTGuide()
 
-    e_tv = ET.Element(
-        "tv",
-        {
-            "source-info-name": "DTT Guide",
-            "source-info-url": "https://dttguide.nbtc.go.th/dttguide/",
-            "generator-info-name": "tv_grab_th_dttguide",
-            "generator-info-url": "https://github.com/peat-psuwit/tv_grab_th_dttguide",
-        },
-    )
-
-    e_tv.extend(
-        channels_from_chnames_and_chlogos(
-            dtt_guide.getChannelNameWeb(),
-            dtt_guide.getChannelLogoMediaWeb(DTTGuide.ChannelType.NATIONAL)
-            + dtt_guide.getChannelLogoMediaWeb(DTTGuide.ChannelType.LOCAL),
-            {
-                # No one calls ThaiPBS "องค์การกระจายเสียงและแพร่ภาพสาธารณะแห่งประเทศไทย"
-                "03": "ThaiPBS",
-                "27": "ช่อง 8",
-            },
-        )
-    )
-
+    chnames = dtt_guide.getChannelNameWeb()
+    chlogos = dtt_guide.getChannelLogoMediaWeb(
+        DTTGuide.ChannelType.NATIONAL
+    ) + dtt_guide.getChannelLogoMediaWeb(DTTGuide.ChannelType.LOCAL)
     program_data = dtt_guide.getProgramDataWeb(
         DTTGuide.ChannelType.NATIONAL
     ) + dtt_guide.getProgramDataWeb(DTTGuide.ChannelType.LOCAL)
@@ -204,6 +183,33 @@ def fetch_filter_convert(
 
     program_data = list(filter(whithin_start_dates, program_data))
 
+    channels_with_program: set[str] = set()
+    for program in program_data:
+        channels_with_program.add(program["channelNo"])
+
+    chnames = list(filter(lambda ch: ch["channelNo"] in channels_with_program, chnames))
+
+    e_tv = ET.Element(
+        "tv",
+        {
+            "source-info-name": "DTT Guide",
+            "source-info-url": "https://dttguide.nbtc.go.th/dttguide/",
+            "generator-info-name": "tv_grab_th_dttguide",
+            "generator-info-url": "https://github.com/peat-psuwit/tv_grab_th_dttguide",
+        },
+    )
+
+    e_tv.extend(
+        channels_from_chnames_and_chlogos(
+            chnames,
+            chlogos,
+            {
+                # No one calls ThaiPBS "องค์การกระจายเสียงและแพร่ภาพสาธารณะแห่งประเทศไทย"
+                "03": "ThaiPBS",
+                "27": "ช่อง 8",
+            },
+        )
+    )
     e_tv.extend(programme_from_programdata(program_data))
 
     tree = ET.ElementTree(e_tv)
