@@ -247,14 +247,15 @@ def main() -> int:
     # https://wiki.xmltv.org/index.php/XmltvCapabilities
     parser.add_argument("--description", action="store_true")
     parser.add_argument("--capabilities", action="store_true")
-    # "baseline" capabilities
+    # "baseline" capability
     # We don't output anything anyway.
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--output", help="Output file, default to standard output.")
     parser.add_argument("--days", type=int)
     parser.add_argument("--offset", type=int)
-    # We offer no configurability.
     parser.add_argument("--config-file")
+    # "manualconfig" capability
+    parser.add_argument("--configure", action="store_true")
 
     args = parser.parse_args()
 
@@ -268,6 +269,14 @@ def main() -> int:
 
     if args.capabilities:
         print("baseline")
+        print("manualconfig")
+        return 0
+
+    if args.configure:
+        print("This grabber does not require any configuration.")
+        if args.config_file:
+            print("But since you provided --config-file, I'll make one for you...")
+            open(args.config_file, "w").close()
         return 0
 
     outfile = sys.stdout
