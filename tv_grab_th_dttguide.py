@@ -213,7 +213,7 @@ def fetch_filter_convert(
     e_tv.extend(programme_from_programdata(program_data))
 
     tree = ET.ElementTree(e_tv)
-    tree.write(outfile, encoding="unicode")
+    tree.write(outfile, encoding="unicode", xml_declaration=True)
 
     # Determine whether program_data covers [earliest_start, latest_start_exclusive)
 
