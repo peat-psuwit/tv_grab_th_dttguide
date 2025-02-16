@@ -6,11 +6,13 @@
 # Copyright (C) 2025-, Ratchanan Srirattanamet <peathot@hotmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+import argparse
 import sys
 import xml.etree.ElementTree as ET
 
 from datetime import datetime, timedelta, timezone
 from enum import Enum
+from typing import TextIO
 
 import requests
 
@@ -145,11 +147,7 @@ def programme_from_programdata(program_data: list[dict[str, str]]) -> list[ET.El
     return ret
 
 
-def main(argv):
-    # TODO: parse args for TV grabber flags
-    # TODO: parse channel type from args
-    channel_type = DTTGuide.ChannelType.NATIONAL
-
+def fetch_and_convert(outfile: TextIO, channel_type: DTTGuide.ChannelType):
     dtt_guide = DTTGuide()
 
     e_tv = ET.Element(
@@ -177,8 +175,45 @@ def main(argv):
     e_tv.extend(programme_from_programdata(dtt_guide.getProgramDataWeb(channel_type)))
 
     tree = ET.ElementTree(e_tv)
-    tree.write(sys.stdout, encoding="unicode")
+    tree.write(outfile, encoding="unicode")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        prog="tv_grab_th_dttguide", description="XMLTV grabber for Thailand's DTT Guide"
+    )
+    # https://wiki.xmltv.org/index.php/XmltvCapabilities
+    parser.add_argument("--description", action="store_true")
+    parser.add_argument("--capabilities", action="store_true")
+    # "baseline" capabilities
+    # We don't output anything anyway.
+    parser.add_argument("--quiet", action="store_true")
+    parser.add_argument("--output", help="Output file, default to standard output.")
+    # We receive fixed amount of data from application, so these 2 arguments are
+    # silently ignored.
+    parser.add_argument("--days")
+    parser.add_argument("--offset")
+    # We offer no configurability.
+    parser.add_argument("--config-file")
+
+    args = parser.parse_args()
+
+    if args.description:
+        print("Thailand (https://dttguide.nbtc.go.th/dttguide)")
+        return 0
+
+    if args.capabilities:
+        print("baseline")
+        return 0
+
+    outfile = sys.stdout
+    if args.output is not None:
+        outfile = open(args.output, "w")
+
+    fetch_and_convert(outfile, DTTGuide.ChannelType.NATIONAL)
+
+    return 0
 
 
 if __name__ == "__main__":
-    main(sys.argv)
+    sys.exit(main())
